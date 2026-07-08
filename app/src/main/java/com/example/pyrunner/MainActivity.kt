@@ -28,7 +28,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var editInput: EditText
     private lateinit var btnSend: Button
 
-    // 파이썬 전용 백그라운드 단일 스레드 풀
+    private lateinit var highlighter: SyntaxHighlighter
     private var executor: ExecutorService? = null
     // stdin(입력) 데이터를 임시 동기화 보관할 큐
     private val inputQueue = LinkedBlockingQueue<String>()
@@ -55,6 +55,22 @@ class MainActivity : AppCompatActivity() {
         }
 
         setupLineNumbers()
+
+        highlighter = SyntaxHighlighter(
+            colorKeyword = ContextCompat.getColor(this, R.color.syntax_keyword),
+            colorString = ContextCompat.getColor(this, R.color.syntax_string),
+            colorComment = ContextCompat.getColor(this, R.color.syntax_comment),
+            colorNumber = ContextCompat.getColor(this, R.color.syntax_number),
+            colorFunction = ContextCompat.getColor(this, R.color.syntax_function),
+            colorBuiltin = ContextCompat.getColor(this, R.color.syntax_builtin)
+        )
+        editCode.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                if (s != null) highlighter.highlight(s)
+            }
+        })
 
         btnRun.setOnClickListener {
             val code = editCode.text.toString()
