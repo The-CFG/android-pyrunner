@@ -1,9 +1,14 @@
 package com.example.pyrunner
 
 import android.os.Bundle
+import android.text.Editable
+import android.text.SpannableString
+import android.text.TextWatcher
+import android.text.style.ForegroundColorSpan
 import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
 import java.util.concurrent.ExecutorService
@@ -13,6 +18,8 @@ import java.util.concurrent.LinkedBlockingQueue
 class MainActivity : AppCompatActivity() {
 
     private lateinit var editCode: EditText
+    private lateinit var txtLineNumbers: TextView
+    private lateinit var txtStatus: TextView
     private lateinit var btnRun: Button
     private lateinit var btnStop: Button
     private lateinit var txtConsole: TextView
@@ -32,6 +39,8 @@ class MainActivity : AppCompatActivity() {
 
         // 뷰 초기화
         editCode = findViewById(R.id.editCode)
+        txtLineNumbers = findViewById(R.id.txtLineNumbers)
+        txtStatus = findViewById(R.id.txtStatus)
         btnRun = findViewById(R.id.btnRun)
         btnStop = findViewById(R.id.btnStop)
         txtConsole = findViewById(R.id.txtConsole)
@@ -44,6 +53,8 @@ class MainActivity : AppCompatActivity() {
         if (!Python.isStarted()) {
             Python.start(AndroidPlatform(this))
         }
+
+        setupLineNumbers()
 
         btnRun.setOnClickListener {
             val code = editCode.text.toString()
@@ -64,14 +75,42 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // 코드 줄 수 변화에 맞춰 줄번호를 갱신하고, 에디터 스크롤과 줄번호 스크롤을 동기화
+    private fun setupLineNumbers() {
+        updateLineNumbers(editCode.lineCount.coerceAtLeast(1))
+
+        editCode.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                updateLineNumbers(editCode.lineCount.coerceAtLeast(1))
+            }
+        })
+
+        editCode.setOnScrollChangeListener { _, _, scrollY, _, _ ->
+            txtLineNumbers.scrollTo(0, scrollY)
+        }
+    }
+
+    private fun updateLineNumbers(lineCount: Int) {
+        val sb = StringBuilder()
+        for (i in 1..lineCount) {
+            sb.append(i)
+            if (i != lineCount) sb.append('\n')
+        }
+        txtLineNumbers.text = sb.toString()
+    }
+
     // 파이썬 엔진과의 인터페이스를 담당하는 내부 브릿지 객체 정의
     inner class AndroidBridge {
-        // 파이썬의 print() 등 출력이 호출될 때 실행됨
+        // 표준 출력(print 등)
         fun onOutput(text: String) {
-            runOnUiThread {
-                txtConsole.append(text)
-                scrollConsole.post { scrollConsole.fullScroll(View.FOCUS_DOWN) }
-            }
+            appendConsole(text, ContextCompat.getColor(this@MainActivity, R.color.console_stdout))
+        }
+
+        // 표준 에러(예외/트레이스백)
+        fun onError(text: String) {
+            appendConsole(text, ContextCompat.getColor(this@MainActivity, R.color.console_stderr))
         }
 
         // 파이썬의 input() 함수가 호출되어 입력을 대기할 때 실행됨
@@ -92,27 +131,46 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun appendConsole(text: String, color: Int) {
+        runOnUiThread {
+            val spannable = SpannableString(text)
+            spannable.setSpan(ForegroundColorSpan(color), 0, text.length, 0)
+            txtConsole.append(spannable)
+            scrollConsole.post { scrollConsole.fullScroll(View.FOCUS_DOWN) }
+        }
+    }
+
     private fun startPythonExecution(code: String) {
         inputQueue.clear()
         txtConsole.text = ""
+        txtStatus.text = "실행 중..."
         btnRun.isEnabled = false
         btnStop.isEnabled = true
         setInputUIVisibility(false)
+
+        val startTime = System.currentTimeMillis()
 
         executor = Executors.newSingleThreadExecutor()
         executor?.execute {
             try {
                 val py = Python.getInstance()
                 val appRunner = py.getModule("app_runner")
-                
+
                 // 실행 및 입출력 제어 함수 호출
                 appRunner.callAttr("run_code", code, AndroidBridge())
             } catch (e: Exception) {
-                runOnUiThread {
-                    txtConsole.append("\n[에러 발생: ${e.message}]\n")
-                }
+                appendConsole(
+                    "\n[에러 발생: ${e.message}]\n",
+                    ContextCompat.getColor(this@MainActivity, R.color.console_stderr)
+                )
             } finally {
+                val elapsedMs = System.currentTimeMillis() - startTime
+                appendConsole(
+                    "\n[완료 (${elapsedMs}ms)]\n",
+                    ContextCompat.getColor(this@MainActivity, R.color.console_success)
+                )
                 runOnUiThread {
+                    txtStatus.text = "완료 (${elapsedMs}ms)"
                     btnRun.isEnabled = true
                     btnStop.isEnabled = false
                     setInputUIVisibility(false)
@@ -124,8 +182,12 @@ class MainActivity : AppCompatActivity() {
     private fun stopPythonExecution() {
         // 백그라운드 스레드를 즉시 종료하도록 시도
         executor?.shutdownNow()
+        appendConsole(
+            "\n[작업이 사용자에 의해 중지되었습니다.]\n",
+            ContextCompat.getColor(this@MainActivity, R.color.console_stderr)
+        )
         runOnUiThread {
-            txtConsole.append("\n[작업이 사용자에 의해 중지되었습니다.]\n")
+            txtStatus.text = "중지됨"
             btnRun.isEnabled = true
             btnStop.isEnabled = false
             setInputUIVisibility(false)
