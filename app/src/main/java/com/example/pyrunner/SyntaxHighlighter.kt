@@ -64,7 +64,7 @@ class SyntaxHighlighter(
                     continue
                 }
                 matcher.group("WORD") != null -> {
-                    val word = matcher.group("WORD")
+                    val word = matcher.group("WORD") ?: continue
                     when {
                         KEYWORDS.contains(word) -> colorKeyword
                         BUILTINS.contains(word) -> colorBuiltin
