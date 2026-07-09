@@ -2,12 +2,12 @@
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
-    id 'com.chaquo.python'
 }
 
 android {
     namespace 'com.example.pyrunner'
     compileSdk 34
+    ndkVersion "27.3.13750724"
 
     defaultConfig {
         applicationId "com.example.pyrunner"
@@ -17,9 +17,16 @@ android {
         versionName "1.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        
+
+        // 지금은 python-android/lib에 arm64-v8a용 .so만 넣어뒀으므로 이 ABI만 빌드
         ndk {
-            abiFilters "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
+            abiFilters "arm64-v8a"
+        }
+
+        externalNativeBuild {
+            cmake {
+                arguments "-DANDROID_STL=c++_shared"
+            }
         }
     }
 
@@ -36,11 +43,25 @@ android {
     kotlinOptions {
         jvmTarget = '17'
     }
-}
 
-chaquopy {
-    defaultConfig {
-        version = "3.10"
+    externalNativeBuild {
+        cmake {
+            path "src/main/cpp/CMakeLists.txt"
+            version "3.22.1"
+        }
+    }
+
+    // assets(파이썬 stdlib)에 이미 .pyc 등 다양한 확장자가 섞여있어서 자동 압축/제외 규칙에
+    // 걸리지 않도록 전부 포함시킴
+    aaptOptions {
+        ignoreAssetsPattern "android-pyrunner-dont-ignore-anything"
+    }
+
+    packagingOptions {
+        // libpython3.14.so 등을 다른 규칙 없이 그대로 APK에 포함
+        jniLibs {
+            useLegacyPackaging = true
+        }
     }
 }
 
