@@ -244,8 +244,31 @@ Java_com_example_pyrunner_PythonEngine_nativeRunCode(
         throw_runtime_exception(env, status.err_msg ? status.err_msg : "Py_InitializeFromConfig failed");
         return 1;
     }
-    LOGD("Py_InitializeFromConfig 성공, Py_RunMain 호출");
+    LOGD("Py_InitializeFromConfig 성공");
 
+    // CPython 3.14 Android 빌드는 Py_InitializeFromConfig() 내부에서
+    // _android_support 모듈을 임포트해 sys.stdout/sys.stderr를 __android_log_write()
+    // (logcat) 기반 객체로 강제 교체한다. 우리는 fd 1/2를 이미 파이프로 dup2 해뒀지만,
+    // 그 fd를 전혀 거치지 않는 객체로 바뀌어 있으므로 여기서 다시 fd 기반
+    // TextIOWrapper로 되돌려줘야 relay_thread가 출력을 받을 수 있다.
+    // write_through=True로 파이썬 레벨 버퍼링도 없앤다 (config.buffered_stdio=0과 동일 취지).
+    const char *fix_stdio =
+        "import sys, io\n"
+        "sys.stdout = io.TextIOWrapper(io.FileIO(1, 'w', closefd=False),\n"
+        "    encoding='utf-8', errors='backslashreplace',\n"
+        "    write_through=True, line_buffering=True)\n"
+        "sys.stderr = io.TextIOWrapper(io.FileIO(2, 'w', closefd=False),\n"
+        "    encoding='utf-8', errors='backslashreplace',\n"
+        "    write_through=True, line_buffering=True)\n";
+    if (PyRun_SimpleString(fix_stdio) != 0) {
+        LOGE("fix_stdio 실행 실패: sys.stdout/stderr를 fd 기반으로 되돌리지 못함 "
+             "(_android_support가 교체한 logcat 객체가 그대로 남아있을 수 있음)");
+        PyErr_Print();
+    } else {
+        LOGD("sys.stdout/sys.stderr를 fd 1/2 기반 TextIOWrapper로 재설정 완료");
+    }
+
+    LOGD("Py_RunMain 호출");
     int exit_code = Py_RunMain();
     LOGD("Py_RunMain 반환: exit_code=%d", exit_code);
 
