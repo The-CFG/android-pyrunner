@@ -17,6 +17,8 @@
 #include <string.h>
 #include <unistd.h>
 #include <limits.h>
+#include <sys/ioctl.h>
+#include <time.h>
 
 #define LOG_TAG "PyRunnerNative"
 #define MAX_CHUNK 4000
@@ -98,6 +100,37 @@ static char *redirect_stream(StreamInfo *si) {
     if ((errno = pthread_create(&thr, NULL, relay_thread, si))) return "pthread_create";
     if ((errno = pthread_detach(thr))) return "pthread_detach";
     return NULL;
+}
+
+// Py_RunMain()이 리턴되는 시점엔 Py_FinalizeEx()까지 끝나서 파이썬이 쓴 데이터는
+// 이미 파이프 버퍼에 들어가 있다. 하지만 그걸 실제로 읽어 자바 콜백으로 넘기는
+// relay_thread는 별도 스레드에서 "비동기로" 동작하기 때문에, 여기서 곧바로
+// nativeRunCode를 리턴해버리면 Kotlin 쪽 finally 블록의 "[완료...]" 메시지가
+// 실제 출력/트레이스백보다 먼저(혹은 그 출력이 UI에 반영되기도 전에) 찍혀버릴 수
+// 있다. FIONREAD로 파이프에 아직 안 읽힌 바이트가 남아있는지 확인하면서, relay
+// thread가 그걸 다 소비할 때까지 짧게 기다려준다 (최대 500ms, 무한루프 방지).
+static void wait_for_pipe_drain(StreamInfo *si) {
+    struct timespec start, now;
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    for (;;) {
+        int pending = 0;
+        if (ioctl(si->pipe_fd[0], FIONREAD, &pending) != 0) {
+            LOGE("[%s] wait_for_pipe_drain: ioctl(FIONREAD) 실패: %s", si->name, strerror(errno));
+            return;
+        }
+        if (pending == 0) {
+            LOGD("[%s] wait_for_pipe_drain: 파이프 비워짐, 종료", si->name);
+            return;
+        }
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        long elapsed_ms = (now.tv_sec - start.tv_sec) * 1000 + (now.tv_nsec - start.tv_nsec) / 1000000;
+        if (elapsed_ms > 500) {
+            LOGE("[%s] wait_for_pipe_drain: 500ms 초과, 남은 바이트=%d, 포기하고 진행", si->name, pending);
+            return;
+        }
+        LOGD("[%s] wait_for_pipe_drain: 아직 %d 바이트 남음, 대기", si->name, pending);
+        usleep(2000); // 2ms
+    }
 }
 
 // --- JNI 진입점 ---------------------------------------------------------------
@@ -201,6 +234,12 @@ Java_com_example_pyrunner_PythonEngine_nativeRunCode(
 
     int exit_code = Py_RunMain();
     LOGD("Py_RunMain 반환: exit_code=%d", exit_code);
+
+    // Py_RunMain 내부에서 Py_FinalizeEx까지 끝나 데이터는 파이프에 이미 다 써졌지만,
+    // relay_thread가 그걸 읽어 콜백으로 넘기는 건 비동기이므로 여기서 잠깐 기다려서
+    // Kotlin 쪽 "[완료...]" 메시지보다 실제 출력이 먼저(혹은 최소한 늦지 않게) 도착하게 한다.
+    wait_for_pipe_drain(&STREAMS[0]);
+    wait_for_pipe_drain(&STREAMS[1]);
 
     (*env)->ReleaseStringUTFChars(env, home, home_utf8);
     (*env)->ReleaseStringUTFChars(env, code, code_utf8);
