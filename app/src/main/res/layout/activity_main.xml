@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#FFFFFF">
+
+    <!-- 상단 툴바: 타이틀 + 실행/중지 아이콘 버튼 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="@color/toolbar_bg"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="8dp"
+        android:gravity="center_vertical"
+        android:elevation="2dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="PyRunner"
+            android:textStyle="bold"
+            android:textSize="16sp"
+            android:textColor="#212121" />
+
+        <!-- 실행 시간 표시 -->
+        <TextView
+            android:id="@+id/txtStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="12dp"
+            android:textSize="12sp"
+            android:textColor="#757575"
+            android:text="" />
+
+        <Button
+            android:id="@+id/btnRun"
+            style="@style/Widget.AppCompat.Button.Colored"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:minWidth="72dp"
+            android:paddingHorizontal="16dp"
+            android:text="▶ 실행"
+            android:textSize="13sp" />
+
+        <Space
+            android:layout_width="8dp"
+            android:layout_height="wrap_content" />
+
+        <Button
+            android:id="@+id/btnStop"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:minWidth="64dp"
+            android:paddingHorizontal="16dp"
+            android:enabled="false"
+            android:text="■ 중지"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <!-- 코드 에디터(좌) + 콘솔(우) 가로 배치 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="horizontal">
+
+        <!-- 코드 에디터 영역: 줄번호 + 코드 입력 (다크) -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:layout_margin="12dp"
+            android:layout_marginEnd="6dp"
+            android:orientation="horizontal"
+            android:background="@drawable/bg_console"
+            android:padding="8dp">
+
+            <TextView
+                android:id="@+id/txtLineNumbers"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:minWidth="28dp"
+                android:gravity="top|end"
+                android:fontFamily="monospace"
+                android:textSize="14sp"
+                android:textColor="@color/line_number"
+                android:paddingEnd="6dp"
+                android:text="1" />
+
+            <EditText
+                android:id="@+id/editCode"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:inputType="textMultiLine|textNoSuggestions"
+                android:gravity="top|start"
+                android:fontFamily="monospace"
+                android:textSize="14sp"
+                android:lineSpacingExtra="2dp"
+                android:textColor="@color/console_stdout"
+                android:background="@android:color/transparent"
+                android:importantForAutofill="no" />
+        </LinearLayout>
+
+        <!-- 터미널 형태의 콘솔 영역 -->
+        <ScrollView
+            android:id="@+id/scrollConsole"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:layout_margin="12dp"
+            android:layout_marginStart="6dp"
+            android:background="@drawable/bg_console"
+            android:padding="10dp">
+
+            <TextView
+                android:id="@+id/txtConsole"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="@color/console_stdout"
+                android:fontFamily="monospace"
+                android:textSize="13sp"
+                android:text="[콘솔 출력창]\n" />
+        </ScrollView>
+    </LinearLayout>
+
+    <!-- 인터랙티브 입력창 (기본값 비활성화, input() 요청 시에만 활성화) -->
+    <LinearLayout
+        android:id="@+id/layoutInput"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_margin="12dp"
+        android:gravity="center_vertical"
+        android:enabled="false">
+
+        <EditText
+            android:id="@+id/editInput"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_weight="1"
+            android:hint="여기에 값을 입력하세요"
+            android:paddingHorizontal="10dp"
+            android:enabled="false"
+            android:importantForAutofill="no"
+            android:inputType="text" />
+
+        <Space
+            android:layout_width="8dp"
+            android:layout_height="wrap_content" />
+
+        <Button
+            android:id="@+id/btnSend"
+            android:layout_width="wrap_content"
+            android:layout_height="44dp"
+            android:enabled="false"
+            android:text="전송" />
+    </LinearLayout>
+</LinearLayout>
