@@ -5,6 +5,7 @@ import android.system.Os
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.InputStream
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Chaquopy를 대체하는, 공식 CPython Android 배포판을 직접 임베드하는 엔진.
@@ -28,6 +29,16 @@ class PythonEngine(private val context: Context) {
 
     private lateinit var pythonHome: File
     private var nativeInitialized = false
+
+    // logcat 없이도 "네이티브 콜백이 실제로 호출됐는지"를 눈으로 확인하기 위한 카운터.
+    // (adb 없는 환경에서 진단용)
+    val outputCallbackCount = AtomicInteger(0)
+    val errorCallbackCount = AtomicInteger(0)
+
+    fun resetCallbackCounters() {
+        outputCallbackCount.set(0)
+        errorCallbackCount.set(0)
+    }
 
     companion object {
         init {
@@ -62,11 +73,13 @@ class PythonEngine(private val context: Context) {
 
     @Suppress("unused") // pyrunner_native.c 의 relay_thread에서 리플렉션 없이 JNI로 직접 호출
     fun onNativeOutput(text: String) {
+        outputCallbackCount.incrementAndGet()
         listener?.onOutput(text)
     }
 
     @Suppress("unused")
     fun onNativeError(text: String) {
+        errorCallbackCount.incrementAndGet()
         listener?.onError(text)
     }
 

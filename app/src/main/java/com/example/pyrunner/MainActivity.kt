@@ -150,6 +150,7 @@ class MainActivity : AppCompatActivity() {
         setInputUIVisibility(true) // input() 호출 시점을 알 수 없으므로 실행 중엔 항상 입력 가능하게 둠
 
         val startTime = System.currentTimeMillis()
+        engine.resetCallbackCounters()
 
         executor = Executors.newSingleThreadExecutor()
         executor?.execute {
@@ -165,8 +166,11 @@ class MainActivity : AppCompatActivity() {
                 val elapsedMs = System.currentTimeMillis() - startTime
                 val statusColor = if (exitCode == 0)
                     R.color.console_success else R.color.console_stderr
+                // 진단용: 네이티브 콜백이 실제로 몇 번 호출됐는지 함께 표시 (logcat 없이 확인용)
+                val outCnt = engine.outputCallbackCount.get()
+                val errCnt = engine.errorCallbackCount.get()
                 appendConsole(
-                    "\n[완료 (종료 코드 $exitCode, ${elapsedMs}ms)]\n",
+                    "\n[완료 (종료 코드 $exitCode, ${elapsedMs}ms, 콜백 stdout=$outCnt stderr=$errCnt)]\n",
                     ContextCompat.getColor(this@MainActivity, statusColor)
                 )
                 runOnUiThread {
