@@ -186,6 +186,20 @@ Java_com_example_pyrunner_PythonEngine_nativeWriteStdin(JNIEnv *env, jobject thi
     (*env)->ReleaseStringUTFChars(env, text, utf8);
 }
 
+JNIEXPORT void JNICALL
+Java_com_example_pyrunner_PythonEngine_nativeTestOutput(JNIEnv *env, jobject thiz) {
+    // 파이썬을 거치지 않고 fd 1/2에 직접 write해서, 파이프+dup2+relay_thread 구조
+    // 자체가 정상 작동하는지 확인하는 진단용 함수. 이게 콘솔에 안 뜨면 파이썬 문제가
+    // 아니라 nativeInit()의 리다이렉션 설정 자체가 문제라는 뜻이다.
+    const char *out_msg = "[nativeTestOutput] raw write to fd 1 (stdout)\n";
+    const char *err_msg = "[nativeTestOutput] raw write to fd 2 (stderr)\n";
+    ssize_t w1 = write(STDOUT_FILENO, out_msg, strlen(out_msg));
+    ssize_t w2 = write(STDERR_FILENO, err_msg, strlen(err_msg));
+    LOGD("nativeTestOutput: write(fd1)=%zd write(fd2)=%zd", w1, w2);
+    wait_for_pipe_drain(&STREAMS[0]);
+    wait_for_pipe_drain(&STREAMS[1]);
+}
+
 JNIEXPORT jint JNICALL
 Java_com_example_pyrunner_PythonEngine_nativeRunCode(
     JNIEnv *env, jobject thiz, jstring home, jstring code

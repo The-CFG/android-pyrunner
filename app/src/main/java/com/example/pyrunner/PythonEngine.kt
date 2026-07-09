@@ -128,9 +128,15 @@ class PythonEngine(private val context: Context) {
         }
     }
 
+    /** 진단용: 파이썬 없이 fd 1/2에 직접 write해서 파이프+relay 구조 자체를 테스트 */
+    fun testOutput() {
+        nativeTestOutput()
+    }
+
     // --- JNI ------------------------------------------------------------------
 
     private external fun nativeInit()
     private external fun nativeRunCode(home: String, code: String): Int
     private external fun nativeWriteStdin(text: String)
+    private external fun nativeTestOutput()
 }

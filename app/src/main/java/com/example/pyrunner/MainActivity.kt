@@ -81,7 +81,18 @@ class MainActivity : AppCompatActivity() {
         txtStatus.text = "초기화 중..."
         Executors.newSingleThreadExecutor().execute {
             engine.init()
+            engine.resetCallbackCounters()
+            engine.testOutput()
+            // testOutput()은 파이썬 없이 fd에 직접 write하므로, 여기서 카운터가 0이면
+            // dup2/파이프/relay_thread 구조 자체가 문제라는 뜻이고, 1 이상이면
+            // 파이프 구조는 정상이고 문제는 파이썬 쪽 write에 있다는 뜻이다.
+            val testOutCnt = engine.outputCallbackCount.get()
+            val testErrCnt = engine.errorCallbackCount.get()
             runOnUiThread {
+                appendConsole(
+                    "[진단] nativeTestOutput 콜백 stdout=$testOutCnt stderr=$testErrCnt\n",
+                    ContextCompat.getColor(this@MainActivity, R.color.console_success)
+                )
                 txtStatus.text = ""
                 btnRun.isEnabled = true
             }
