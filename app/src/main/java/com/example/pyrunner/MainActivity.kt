@@ -7,6 +7,7 @@ import android.text.TextWatcher
 import android.text.style.ForegroundColorSpan
 import android.view.View
 import android.widget.*
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import java.util.concurrent.ExecutorService
@@ -19,6 +20,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var txtStatus: TextView
     private lateinit var btnRun: Button
     private lateinit var btnStop: Button
+    private lateinit var btnPip: Button
     private lateinit var txtConsole: TextView
     private lateinit var scrollConsole: ScrollView
     private lateinit var layoutInput: LinearLayout
@@ -41,6 +43,7 @@ class MainActivity : AppCompatActivity() {
         txtStatus = findViewById(R.id.txtStatus)
         btnRun = findViewById(R.id.btnRun)
         btnStop = findViewById(R.id.btnStop)
+        btnPip = findViewById(R.id.btnPip)
         txtConsole = findViewById(R.id.txtConsole)
         scrollConsole = findViewById(R.id.scrollConsole)
         layoutInput = findViewById(R.id.layoutInput)
@@ -78,6 +81,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         btnRun.isEnabled = false
+        btnPip.isEnabled = false
         txtStatus.text = "초기화 중..."
         Executors.newSingleThreadExecutor().execute {
             engine.init()
@@ -95,6 +99,7 @@ class MainActivity : AppCompatActivity() {
                 )
                 txtStatus.text = ""
                 btnRun.isEnabled = true
+                btnPip.isEnabled = true
             }
         }
 
@@ -107,6 +112,10 @@ class MainActivity : AppCompatActivity() {
 
         btnStop.setOnClickListener {
             stopPythonExecution()
+        }
+
+        btnPip.setOnClickListener {
+            showPackageManagerDialog()
         }
 
         btnSend.setOnClickListener {
@@ -157,6 +166,7 @@ class MainActivity : AppCompatActivity() {
         txtConsole.text = ""
         txtStatus.text = "실행 중..."
         btnRun.isEnabled = false
+        btnPip.isEnabled = false
         btnStop.isEnabled = true
         setInputUIVisibility(true) // input() 호출 시점을 알 수 없으므로 실행 중엔 항상 입력 가능하게 둠
 
@@ -187,6 +197,7 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread {
                     txtStatus.text = "완료 (${elapsedMs}ms)"
                     btnRun.isEnabled = true
+                    btnPip.isEnabled = true
                     btnStop.isEnabled = false
                     setInputUIVisibility(false)
                 }
@@ -205,6 +216,7 @@ class MainActivity : AppCompatActivity() {
         runOnUiThread {
             txtStatus.text = "중지 요청됨"
             btnRun.isEnabled = true
+            btnPip.isEnabled = true
             btnStop.isEnabled = false
             setInputUIVisibility(false)
         }
@@ -214,5 +226,66 @@ class MainActivity : AppCompatActivity() {
         layoutInput.isEnabled = enabled
         editInput.isEnabled = enabled
         btnSend.isEnabled = enabled
+    }
+
+    // --- pip 패키지 관리 다이얼로그 ---------------------------------------------
+
+    private fun showPackageManagerDialog() {
+        val editSpec = EditText(this).apply {
+            hint = "패키지명 (예: requests, six==1.16.0)"
+        }
+        val padding = (16 * resources.displayMetrics.density).toInt()
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(padding, padding, padding, padding)
+            addView(editSpec)
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("패키지 관리 (pip)")
+            .setMessage(
+                "주의: 이 빌드엔 zlib 모듈이 없어 압축된 wheel(zip)은 대부분 설치에 실패합니다.\n" +
+                    "순수 파이썬 + 무압축(STORED) wheel만 설치될 수 있습니다."
+            )
+            .setView(container)
+            .setPositiveButton("설치") { _, _ ->
+                val spec = editSpec.text.toString().trim()
+                if (spec.isNotEmpty()) startPackageInstall(spec)
+            }
+            .setNegativeButton("닫기", null)
+            .show()
+    }
+
+    private fun startPackageInstall(spec: String) {
+        txtStatus.text = "패키지 설치 중..."
+        btnRun.isEnabled = false
+        btnPip.isEnabled = false
+        appendConsole(
+            "\n[pip install $spec 시작]\n",
+            ContextCompat.getColor(this, R.color.console_stdout)
+        )
+
+        Executors.newSingleThreadExecutor().execute {
+            var exitCode = -1
+            try {
+                exitCode = engine.installPackage(spec)
+            } catch (e: Exception) {
+                appendConsole(
+                    "\n[네이티브 에러: ${e.message}]\n",
+                    ContextCompat.getColor(this@MainActivity, R.color.console_stderr)
+                )
+            } finally {
+                val statusColor = if (exitCode == 0) R.color.console_success else R.color.console_stderr
+                appendConsole(
+                    "\n[pip 종료 코드 $exitCode]\n",
+                    ContextCompat.getColor(this@MainActivity, statusColor)
+                )
+                runOnUiThread {
+                    txtStatus.text = ""
+                    btnRun.isEnabled = true
+                    btnPip.isEnabled = true
+                }
+            }
+        }
     }
 }

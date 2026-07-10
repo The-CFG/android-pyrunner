@@ -64,6 +64,70 @@ class PythonEngine(private val context: Context) {
         return nativeRunCode(pythonHome.absolutePath, code)
     }
 
+    /**
+     * pip install을 실행한다. 서브프로세스를 못 쓰는 환경(Android)이라
+     * ensurepip.bootstrap() 대신 pip 번들 wheel을 sys.path에 직접 넣고
+     * pip._internal.cli.main을 같은 프로세스 안에서 직접 호출한다.
+     * runCode()와 동일한 native 경로(nativeRunCode)를 재사용하므로
+     * 출력은 기존 콘솔 콜백(onNativeOutput/onNativeError)으로 그대로 들어온다.
+     *
+     * 주의: 이 빌드엔 zlib 모듈이 없어서 압축된 wheel(zip)은 zipimport/zipfile로
+     * 열 수 없다. 순수 파이썬 + 무압축(STORED) wheel이 아니면 대부분 이 단계에서
+     * 실패한다. zlib 확장 모듈이 추가되기 전까지는 참고용으로만 사용할 것.
+     */
+    fun installPackage(packageSpec: String): Int {
+        return nativeRunCode(pythonHome.absolutePath, buildPipInstallCode(packageSpec))
+    }
+
+    private fun pyStringLiteral(s: String): String {
+        val escaped = s.replace("\\", "\\\\").replace("\"", "\\\"")
+        return "\"$escaped\""
+    }
+
+    private fun buildPipInstallCode(packageSpec: String): String {
+        val pkgLiteral = pyStringLiteral(packageSpec)
+        return """
+            |import sys, os
+            |
+            |def _fail(msg):
+            |    print(msg, file=sys.stderr)
+            |    raise SystemExit(1)
+            |
+            |try:
+            |    import ensurepip
+            |    from pathlib import Path
+            |    _wheel = sorted(Path(ensurepip.__file__).parent.joinpath("_bundled").glob("pip-*.whl"))[-1]
+            |except Exception as e:
+            |    _fail("[pip] ensurepip 번들 wheel을 찾지 못함: " + type(e).__name__ + ": " + str(e))
+            |
+            |_wheel_str = str(_wheel)
+            |if _wheel_str not in sys.path:
+            |    sys.path.insert(0, _wheel_str)
+            |
+            |os.environ["PIP_DISABLE_PIP_VERSION_CHECK"] = "1"
+            |os.environ["PIP_NO_INPUT"] = "1"
+            |os.environ["PIP_CONFIG_FILE"] = os.devnull
+            |
+            |try:
+            |    from pip._internal.cli.main import main as _pip_main
+            |except Exception as e:
+            |    _fail(
+            |        "[pip] pip 모듈을 불러오지 못했습니다: " + type(e).__name__ + ": " + str(e) + "\n"
+            |        "이 빌드엔 zlib 모듈이 없어 압축된 wheel(zip)을 zipimport로 열 수 없는 경우가 많습니다.\n"
+            |        "(순수 파이썬 + 무압축 wheel이 아니면 대부분 이 단계에서 실패합니다)"
+            |    )
+            |
+            |_args = ["install", "--disable-pip-version-check", "--no-input",
+            |         "--only-binary=:all:", "--no-cache-dir", $pkgLiteral]
+            |
+            |print("[pip] 실행: pip " + " ".join(_args))
+            |_code = _pip_main(_args)
+            |if _code != 0:
+            |    _fail("[pip] 설치 실패 (exit=" + str(_code) + ")")
+            |print("[pip] 설치 완료")
+        """.trimMargin()
+    }
+
     /** input() 이 대기 중일 때 사용자가 입력한 값을 파이썬 stdin으로 전달 ('\n' 포함해서 넘길 것) */
     fun writeStdin(text: String) {
         nativeWriteStdin(text)
