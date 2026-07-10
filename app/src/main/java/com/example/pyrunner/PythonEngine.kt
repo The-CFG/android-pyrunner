@@ -50,6 +50,9 @@ class PythonEngine(private val context: Context) {
     fun init() {
         // Python이 임시 디렉터리를 찾을 때 쓰는 변수 (API 33 미만에서는 안드로이드가 안 채워줌)
         Os.setenv("TMPDIR", context.cacheDir.toString(), false)
+        // pip/platformdirs가 os.path.expanduser("~")를 호출할 때 HOME이 없으면
+        // pwd 모듈(안드로이드엔 없음)로 폴백하려다 죽는 경우가 있어 미리 채워둔다.
+        Os.setenv("HOME", context.filesDir.toString(), false)
 
         pythonHome = extractAssetsIfNeeded()
 

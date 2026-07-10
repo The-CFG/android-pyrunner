@@ -268,6 +268,23 @@ Java_com_example_pyrunner_PythonEngine_nativeRunCode(
         LOGD("sys.stdout/sys.stderr를 fd 1/2 기반 TextIOWrapper로 재설정 완료");
     }
 
+    // 네이티브 크래시(세그폴트 등)가 나면 Kotlin의 try/catch로는 절대 못 잡고
+    // 프로세스가 그냥 죽어버린다. faulthandler를 켜두면 치명적 시그널(SIGSEGV,
+    // SIGABRT, SIGBUS, SIGFPE)을 가로채 "그 순간의 파이썬 스택 트레이스"를
+    // stderr에 강제로(시그널 세이프하게, 버퍼링 없이) 써준다. 이건 이미 fd 2 기반
+    // 파이프로 리다이렉션돼 있으므로 콘솔에 그대로 뜬다 — 죽기 직전 정확히 어느
+    // 파이썬 코드에서 크래시가 났는지 알 수 있는 사실상 유일한 방법.
+    const char *enable_faulthandler =
+        "import faulthandler, sys\n"
+        "faulthandler.enable(file=sys.stderr, all_threads=True)\n";
+    if (PyRun_SimpleString(enable_faulthandler) != 0) {
+        LOGE("faulthandler.enable() 실패 (이 빌드엔 faulthandler 모듈이 없을 수 있음, "
+             "진단 기능 없이 계속 진행)");
+        PyErr_Print();
+    } else {
+        LOGD("faulthandler 활성화 완료");
+    }
+
     LOGD("Py_RunMain 호출");
     int exit_code = Py_RunMain();
     LOGD("Py_RunMain 반환: exit_code=%d", exit_code);

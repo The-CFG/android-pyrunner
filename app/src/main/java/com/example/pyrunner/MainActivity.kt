@@ -1,5 +1,7 @@
 package com.example.pyrunner
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.os.Bundle
 import android.text.Editable
 import android.text.SpannableString
@@ -21,6 +23,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnRun: Button
     private lateinit var btnStop: Button
     private lateinit var btnPip: Button
+    private lateinit var btnLog: Button
     private lateinit var txtConsole: TextView
     private lateinit var scrollConsole: ScrollView
     private lateinit var layoutInput: LinearLayout
@@ -44,6 +47,7 @@ class MainActivity : AppCompatActivity() {
         btnRun = findViewById(R.id.btnRun)
         btnStop = findViewById(R.id.btnStop)
         btnPip = findViewById(R.id.btnPip)
+        btnLog = findViewById(R.id.btnLog)
         txtConsole = findViewById(R.id.txtConsole)
         scrollConsole = findViewById(R.id.scrollConsole)
         layoutInput = findViewById(R.id.layoutInput)
@@ -116,6 +120,10 @@ class MainActivity : AppCompatActivity() {
 
         btnPip.setOnClickListener {
             showPackageManagerDialog()
+        }
+
+        btnLog.setOnClickListener {
+            showLogcatDialog()
         }
 
         btnSend.setOnClickListener {
@@ -269,9 +277,11 @@ class MainActivity : AppCompatActivity() {
             var exitCode = -1
             try {
                 exitCode = engine.installPackage(spec)
-            } catch (e: Exception) {
+            } catch (t: Throwable) {
                 appendConsole(
-                    "\n[네이티브 에러: ${e.message}]\n",
+                    "\n[네이티브/JVM 에러: ${t.javaClass.simpleName}: ${t.message}]\n" +
+                        "(이 정도까진 잡혔다는 건 크래시가 아니라 예외였다는 뜻. 만약 이 메시지 없이 " +
+                        "앱이 그냥 꺼졌다면 진짜 네이티브 크래시이므로 '📋 로그' 버튼으로 확인하세요.)\n",
                     ContextCompat.getColor(this@MainActivity, R.color.console_stderr)
                 )
             } finally {
@@ -284,6 +294,61 @@ class MainActivity : AppCompatActivity() {
                     txtStatus.text = ""
                     btnRun.isEnabled = true
                     btnPip.isEnabled = true
+                }
+            }
+        }
+    }
+
+    // --- 로그캣 뷰어 (adb 없이 폰에서 바로 확인용) --------------------------------
+    //
+    // 네이티브 크래시(세그폴트)는 Kotlin try/catch로 절대 못 잡고 프로세스가
+    // 그대로 죽는다. logcat 링버퍼는 OS 레벨이라 앱이 재시작돼도 최근 로그가
+    // 남아있으므로, 크래시 후 앱을 다시 켜서 이 버튼을 눌러도 직전 크래시
+    // 원인(Fatal signal ... / faulthandler 트레이스백 등)을 확인할 수 있다.
+    // 단, 안드로이드 버전/제조사에 따라 자기 프로세스 로그만 보이거나
+    // logcat 실행 자체가 막혀 있을 수 있다 (그럴 땐 아래에서 에러 메시지로 안내).
+
+    private fun showLogcatDialog() {
+        val progress = TextView(this).apply {
+            text = "로그 읽는 중..."
+            setPadding(32, 32, 32, 32)
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("로그 (logcat 최근 500줄)")
+            .setView(progress)
+            .setNegativeButton("닫기", null)
+            .setNeutralButton("복사", null) // 아래에서 리스너 다시 세팅 (로그 로딩 후)
+            .create()
+        dialog.show()
+
+        Executors.newSingleThreadExecutor().execute {
+            val logText = try {
+                val process = ProcessBuilder("logcat", "-d", "-t", "500", "-v", "brief")
+                    .redirectErrorStream(true)
+                    .start()
+                process.inputStream.bufferedReader().readText().ifBlank { "(로그가 비어 있음)" }
+            } catch (t: Throwable) {
+                "logcat 실행 실패: ${t.javaClass.simpleName}: ${t.message}\n" +
+                    "이 기기/안드로이드 버전에서는 앱이 직접 logcat을 실행할 수 없을 수 있습니다.\n" +
+                    "PC가 있다면: adb logcat -s PyRunnerNative *:E"
+            }
+
+            runOnUiThread {
+                if (!isFinishing) {
+                    val scrollableText = TextView(this).apply {
+                        text = logText
+                        setTextIsSelectable(true)
+                        typeface = android.graphics.Typeface.MONOSPACE
+                        textSize = 11f
+                        setPadding(24, 24, 24, 24)
+                    }
+                    val scroll = ScrollView(this).apply { addView(scrollableText) }
+                    dialog.setView(scroll)
+                    dialog.getButton(AlertDialog.BUTTON_NEUTRAL)?.setOnClickListener {
+                        val cm = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+                        cm.setPrimaryClip(ClipData.newPlainText("logcat", logText))
+                        Toast.makeText(this, "클립보드에 복사됨", Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
         }

@@ -71,6 +71,19 @@
             android:paddingHorizontal="12dp"
             android:text="📦 패키지"
             android:textSize="13sp" />
+
+        <Space
+            android:layout_width="8dp"
+            android:layout_height="wrap_content" />
+
+        <Button
+            android:id="@+id/btnLog"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:minWidth="56dp"
+            android:paddingHorizontal="12dp"
+            android:text="📋 로그"
+            android:textSize="13sp" />
     </LinearLayout>
 
     <!-- 코드 에디터(좌) + 콘솔(우) 가로 배치 -->
